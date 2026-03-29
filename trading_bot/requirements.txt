@@ -1,0 +1,30 @@
+# Core data
+pandas>=2.0.0
+numpy>=1.24.0
+polars>=0.20.0
+
+# Config
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+
+# Data ingestion
+yfinance>=0.2.36
+requests>=2.31.0
+ccxt>=4.0.0
+
+# Strategy / analysis
+scipy>=1.11.0
+vectorbt>=0.26.0
+
+# Visualization
+plotly>=5.18.0
+
+# Backtesting / logging
+loguru>=0.7.0
+
+# Terminal UI
+rich>=13.7.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0

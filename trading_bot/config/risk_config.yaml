@@ -1,0 +1,67 @@
+# =============================================================================
+# risk_config.yaml — Risk Management Parameters
+# =============================================================================
+# These values are treated as hard limits. The risk_manager.py enforces them
+# before any order reaches the execution layer. Never bypass these.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Account Parameters
+# ---------------------------------------------------------------------------
+account:
+  starting_balance: 100000.0   # USD — paper account starting equity
+  currency: "USD"
+
+# ---------------------------------------------------------------------------
+# Position Sizing
+# ---------------------------------------------------------------------------
+position_sizing:
+  method: "fixed_risk_pct"     # fixed_risk_pct | fixed_contracts | kelly
+  risk_per_trade_pct: 1.0      # % of account to risk per trade
+  max_risk_per_trade_pct: 2.0  # Hard ceiling — never exceed this per trade
+  max_contracts: 5             # Absolute max contracts regardless of math
+
+# ---------------------------------------------------------------------------
+# Daily Loss Limits
+# ---------------------------------------------------------------------------
+daily_limits:
+  max_daily_loss_pct: 3.0      # % of account — halt trading if breached
+  max_daily_loss_usd: 3000.0   # USD equivalent — whichever is hit first
+  max_trades_per_day: 6        # Circuit breaker: too many trades = bad day
+  consecutive_loss_halt: 3     # Stop trading after N consecutive losses
+
+# ---------------------------------------------------------------------------
+# Trade-Level Risk
+# ---------------------------------------------------------------------------
+trade:
+  max_stop_distance_pct: 1.5   # Max stop distance as % of price
+  min_stop_distance_ticks: 4   # Minimum stop — prevent hunting at noise level
+  use_breakeven_rule: true      # Move stop to breakeven when 1R is reached
+  breakeven_trigger_r: 1.0     # Move to BE after gaining this many R
+  trail_after_r: 2.0           # Begin trailing stop after this many R gained
+  trail_atr_mult: 1.0          # Trail by N × ATR(14)
+
+# ---------------------------------------------------------------------------
+# Portfolio / Exposure
+# ---------------------------------------------------------------------------
+portfolio:
+  max_open_positions: 2        # Never hold more than N positions at once
+  max_correlated_exposure: 1   # Max positions in correlated instruments
+  correlated_symbols:          # These are treated as a single exposure group
+    - ["NQ=F", "ES=F", "SPY", "QQQ"]
+
+# ---------------------------------------------------------------------------
+# Drawdown Controls
+# ---------------------------------------------------------------------------
+drawdown:
+  max_drawdown_pct: 10.0       # % from equity peak — pause trading if hit
+  drawdown_review_period: "1W" # After hitting DD limit, review before resuming
+  reduce_size_at_pct: 5.0      # Halve position size after this % drawdown
+
+# ---------------------------------------------------------------------------
+# Paper Trading Safety
+# ---------------------------------------------------------------------------
+paper:
+  enforce_all_risk_rules: true  # Even in paper mode, all rules must pass
+  simulate_partial_fills: false # Keep simple for now
+  simulate_slippage: true
