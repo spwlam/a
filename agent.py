@@ -159,11 +159,17 @@ class CandidateFilteringAgent:
         response = self.client.messages.parse(
             model="claude-opus-4-6",
             max_tokens=8192,
-            thinking={"type": "adaptive"},
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
             output_format=FilteringResult,
         )
+
+        if response.parsed_output is None:
+            raise RuntimeError(
+                f"Model failed to return structured output "
+                f"(stop_reason={response.stop_reason}). "
+                "Try reducing the number of roles per batch or increasing max_tokens."
+            )
 
         return response.parsed_output
 
