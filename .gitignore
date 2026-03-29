@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs and data (keep .gitkeep, ignore actual files)
+*.log
+trading_bot/logs/*.log
+trading_bot/logs/*.jsonl
+trading_bot/data/raw/*.csv
+trading_bot/data/raw/*.parquet
+trading_bot/data/processed/*.csv
+trading_bot/data/processed/*.parquet
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
