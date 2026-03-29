@@ -1,67 +1,154 @@
 # =============================================================================
 # risk_config.yaml — Risk Management Parameters
 # =============================================================================
-# These values are treated as hard limits. The risk_manager.py enforces them
-# before any order reaches the execution layer. Never bypass these.
+# These values are treated as hard limits.
+# risk_manager.py and trade_validator.py enforce them before any order
+# reaches the execution layer. No code path bypasses these.
+#
+# Rule of thumb: if breaching a limit feels uncomfortable, the limit is correct.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Account Parameters
+# Account
 # ---------------------------------------------------------------------------
 account:
-  starting_balance: 100000.0   # USD — paper account starting equity
+  size: 25000.0                 # USD — paper account starting equity
   currency: "USD"
+  # Prop firm / PDT note:
+  #   $25,000 keeps a margin account above the PDT rule threshold ($25k minimum).
+  #   For futures-only trading this limit doesn't apply, but it sets a
+  #   psychologically realistic starting balance for ES futures paper trading.
 
 # ---------------------------------------------------------------------------
 # Position Sizing
 # ---------------------------------------------------------------------------
 position_sizing:
-  method: "fixed_risk_pct"     # fixed_risk_pct | fixed_contracts | kelly
-  risk_per_trade_pct: 1.0      # % of account to risk per trade
-  max_risk_per_trade_pct: 2.0  # Hard ceiling — never exceed this per trade
-  max_contracts: 5             # Absolute max contracts regardless of math
+  method: "fixed_risk_pct"      # fixed_risk_pct | fixed_contracts | kelly
+  risk_per_trade_pct: 0.5       # 0.5% of account risked per trade
+                                # 0.5% × $25,000 = $125 risk per trade
+                                # At ES: $125 / $12.50 per tick = 10 ticks max stop
+                                # Approximately 2.5 ES points maximum stop
+  max_risk_per_trade_pct: 1.0   # Hard ceiling — never exceed this regardless of math
+                                # 1.0% × $25,000 = $250 hard max per trade
+  max_contracts: 2              # Absolute max contracts at this account size
+                                # 1 ES contract = $50/point; 2 contracts = $100/point
+  fixed_contracts: 1            # Used when method = "fixed_contracts"
+
+  # Risk per trade sizing note:
+  #   Starting at 0.5% is intentionally conservative for paper trading.
+  #   The goal is to validate the strategy edge before scaling size.
+  #   Increase risk_per_trade_pct only after 50+ paper trades confirm edge.
 
 # ---------------------------------------------------------------------------
 # Daily Loss Limits
 # ---------------------------------------------------------------------------
 daily_limits:
-  max_daily_loss_pct: 3.0      # % of account — halt trading if breached
-  max_daily_loss_usd: 3000.0   # USD equivalent — whichever is hit first
-  max_trades_per_day: 6        # Circuit breaker: too many trades = bad day
-  consecutive_loss_halt: 3     # Stop trading after N consecutive losses
+  max_daily_loss_pct: 2.0       # Stop trading after losing 2% of account in a day
+                                # 2.0% × $25,000 = $500 max daily loss
+  max_daily_loss_usd: 500.0     # USD equivalent — enforced alongside pct (whichever first)
+  max_trades_per_session: 3     # Circuit breaker: max trades in a single session
+                                # 3 high-quality setups is sufficient; more = overtrading
+  consecutive_loss_halt: 2      # Stop trading after 2 consecutive losses
+                                # Two losses in a row = something is wrong; pause, review
+
+  # Daily limit rationale:
+  #   -2% daily loss is a standard prop firm / funded account daily drawdown limit.
+  #   Staying within this trains discipline and is a prerequisite for live trading.
 
 # ---------------------------------------------------------------------------
 # Trade-Level Risk
 # ---------------------------------------------------------------------------
 trade:
-  max_stop_distance_pct: 1.5   # Max stop distance as % of price
-  min_stop_distance_ticks: 4   # Minimum stop — prevent hunting at noise level
-  use_breakeven_rule: true      # Move stop to breakeven when 1R is reached
-  breakeven_trigger_r: 1.0     # Move to BE after gaining this many R
-  trail_after_r: 2.0           # Begin trailing stop after this many R gained
-  trail_atr_mult: 1.0          # Trail by N × ATR(14)
+  min_reward_to_risk: 2.0       # Minimum R:R required to take a trade
+                                # 2R means: risking $125 to make $250 minimum
+  max_stop_distance_pct: 0.5    # Max stop as % of current price
+                                # 0.5% of ES @ 5000 = 25 points — large stop cap
+  min_stop_distance_ticks: 4    # Minimum stop = 4 ticks (1 ES point)
+                                # Prevents placing stops in noise / spread range
+
+  # Stop management
+  use_breakeven_rule: true       # Move stop to breakeven after 1R profit
+  breakeven_trigger_r: 1.0      # Trigger BE move after gaining this many R
+  trail_after_r: 2.0            # Begin trailing stop after 2R gained
+  trail_atr_mult: 1.0           # Trail distance = 1 × ATR(14)
+
+# ---------------------------------------------------------------------------
+# Trade Filtering — Spread and Slippage
+# ---------------------------------------------------------------------------
+execution_quality:
+  max_spread_pct: 0.05          # Skip trade if bid-ask spread > 0.05% of price
+                                # 0.05% of ES @ 5000 = 2.5 points = 10 ticks
+                                # ES typical spread is 0.25 pts (1 tick) — this is generous
+  slippage_pct: 0.02            # Assumed slippage in backtest / paper simulation
+                                # 0.02% of 5000 = 1 point = 4 ticks (conservative for ES)
+  slippage_ticks: 1             # Alternative: express slippage as ticks (1 tick = $12.50)
+                                # Use slippage_ticks for tick-based instruments; pct otherwise
+  commission_per_side: 2.25     # USD per contract per side (NFA + clearing, approx)
+                                # Round-trip commission: $4.50 per contract
+
+# ---------------------------------------------------------------------------
+# Volatility Filter
+# ---------------------------------------------------------------------------
+volatility_filter:
+  enabled: true
+  atr_period: 14                # ATR lookback period (standard)
+  min_atr_pct: 0.1              # Skip if ATR < 0.1% of price — market too quiet
+                                # 0.1% of 5000 = 5 ES points minimum expected range
+                                # Below this = no directional conviction; setups fail
+  max_atr_pct: 3.0              # Skip if ATR > 3.0% of price — market too volatile
+                                # 3.0% of 5000 = 150 ES points — news/crash event
+                                # Stop placement becomes unreliable in these conditions
+
+  # ATR filter logic:
+  #   ATR is computed on the execution_timeframe (5m).
+  #   A 14-period ATR on 5m covers ~70 minutes of market time.
+  #   min_atr check: prevents trading during dead markets (pre-market, lunch)
+  #   max_atr check: prevents trading during unpredictable spike events
+
+# ---------------------------------------------------------------------------
+# News / Event Filters
+# ---------------------------------------------------------------------------
+news_filter:
+  no_trade_before_news: true    # Block new entries within the news window
+  news_window_minutes: 15       # No new entries within 15 min of a scheduled event
+                                # Applies to: FOMC, NFP, CPI, GDP, earnings (if applicable)
+  news_source: "manual"         # manual | economic_calendar_api (future)
+                                # In manual mode: operator marks news times before session
+
+  no_trade_minutes_before_close: 15  # No new entries within 15 min of session close
+                                     # Applies to new_york_close (16:00 UTC)
+                                     # Avoids end-of-day position risk and poor fills
 
 # ---------------------------------------------------------------------------
 # Portfolio / Exposure
 # ---------------------------------------------------------------------------
 portfolio:
-  max_open_positions: 2        # Never hold more than N positions at once
-  max_correlated_exposure: 1   # Max positions in correlated instruments
-  correlated_symbols:          # These are treated as a single exposure group
-    - ["NQ=F", "ES=F", "SPY", "QQQ"]
+  max_concurrent_positions: 2   # Never hold more than 2 open positions simultaneously
+                                 # At 0.5% risk per trade: 2 positions = 1% total exposure
+  max_correlated_exposure: 1     # Max positions in correlated instruments (ES + NQ = 1 group)
+  correlated_groups:
+    - ["ES", "NQ", "SPY", "QQQ", "RTY"]  # US equity index group
 
 # ---------------------------------------------------------------------------
 # Drawdown Controls
 # ---------------------------------------------------------------------------
 drawdown:
-  max_drawdown_pct: 10.0       # % from equity peak — pause trading if hit
-  drawdown_review_period: "1W" # After hitting DD limit, review before resuming
-  reduce_size_at_pct: 5.0      # Halve position size after this % drawdown
+  max_drawdown_pct: 6.0          # Pause all trading at 6% peak-to-trough drawdown
+                                  # 6% × $25,000 = $1,500 drawdown limit
+  reduce_size_at_pct: 3.0        # Reduce position size by 50% at 3% drawdown
+                                  # 3% × $25,000 = $750 — early warning throttle
+  drawdown_review_period: "1D"   # After hitting max DD, mandatory review before resuming
+
+  # Drawdown context:
+  #   A 6% account drawdown at this stage means the strategy is not performing.
+  #   Stop. Review the journal. Do not attempt to trade out of a hole.
 
 # ---------------------------------------------------------------------------
 # Paper Trading Safety
 # ---------------------------------------------------------------------------
 paper:
-  enforce_all_risk_rules: true  # Even in paper mode, all rules must pass
-  simulate_partial_fills: false # Keep simple for now
-  simulate_slippage: true
+  enforce_all_risk_rules: true   # All risk rules apply identically in paper mode
+  simulate_slippage: true        # Apply slippage_ticks to all paper fills
+  simulate_commission: true      # Deduct commission from paper P&L
+  simulate_partial_fills: false  # Keep fills simple — full fills only for now
+  mark_to_market: true           # Track unrealized P&L on open positions

@@ -3,41 +3,121 @@
 # =============================================================================
 # All strategy, session, and execution parameters live here.
 # No magic numbers should exist in code — reference this file instead.
+#
+# Time convention: all times are UTC unless explicitly noted otherwise.
+#   Eastern Time offsets:  EST = UTC-5  |  EDT = UTC-4 (Mar–Nov)
+#   London offsets:        GMT = UTC+0  |  BST = UTC+1 (Mar–Oct)
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Trading Universe
+# Instrument
 # ---------------------------------------------------------------------------
-trading:
-  symbols:
-    - "NQ=F"    # Nasdaq 100 Futures (primary)
-    - "ES=F"    # S&P 500 Futures
-    - "SPY"     # S&P 500 ETF (equity fallback)
-  primary_timeframe: "15m"    # Signal timeframe
-  htf_timeframe: "1h"         # Higher timeframe for ICT bias
-  ltf_timeframe: "5m"         # Lower timeframe for entry refinement
-  mode: "paper"               # paper | live
+instrument:
+  symbol: "ES"                  # E-mini S&P 500 (primary instrument)
+  #  yfinance ticker  : "ES=F"
+  #  ccxt format      : not applicable (futures — use broker feed)
+  #  point_value      : $50 per point (ES contract)
+  #  tick_size        : 0.25 points
+  #  tick_value       : $12.50 per tick
+  description: "E-mini S&P 500 Futures"
+  point_value: 50.0             # USD per 1-point move per contract
+  tick_size: 0.25               # Minimum price increment
+  tick_value: 12.50             # USD per tick per contract
+  currency: "USD"
+  exchange: "CME"
 
 # ---------------------------------------------------------------------------
-# Session Windows (all times in UTC)
+# Timeframes
+# ---------------------------------------------------------------------------
+timeframes:
+  all:                          # Full hierarchy — used for multi-TF analysis
+    - "1m"
+    - "5m"
+    - "15m"
+    - "1h"
+    - "4h"
+    - "D"
+  bias_timeframe: "1h"          # HTF for determining market bias (BOS/CHoCH/trend)
+  confirmation_timeframe: "15m" # Mid-TF for structure confirmation and FVG location
+  execution_timeframe: "5m"     # LTF for precise entry timing and pattern triggers
+
+  # Timeframe role notes:
+  #   bias (1h)         → determines bullish/bearish bias via BOS and CHoCH
+  #   confirmation (15m)→ locates FVGs, OBs, and structure events to trade into
+  #   execution (5m)    → Strat pattern completes here; entry/stop set at this TF
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+data:
+  source: "yfinance"            # yfinance | ccxt | polygon | alpaca
+  lookback_candles: 500         # Number of historical bars to fetch per timeframe
+  #  500 bars @ 5m  ≈ ~41 hours of data  (covers ~2 full sessions)
+  #  500 bars @ 15m ≈ ~5 trading days
+  #  500 bars @ 1h  ≈ ~20 trading days
+  #  500 bars @ 4h  ≈ ~83 trading days (~4 months)
+  #  500 bars @ 1D  ≈ ~2 years
+  cache_enabled: true           # Cache fetched bars to data/raw/ as Parquet
+  cache_max_age_minutes: 5      # Re-fetch if cached data is older than this
+
+  # yfinance symbol mapping
+  yfinance_symbols:
+    ES: "ES=F"
+    NQ: "NQ=F"
+    RTY: "RTY=F"
+    GC: "GC=F"    # Gold
+    CL: "CL=F"    # Crude oil
+
+# ---------------------------------------------------------------------------
+# Mode
+# ---------------------------------------------------------------------------
+mode: "paper"                   # paper | backtest | live
+#
+#  paper    : Live market data + simulated order execution. All risk rules apply.
+#  backtest : Historical data replay. Walk-forward, no lookahead.
+#  live     : Real orders sent to broker. NOT enabled until paper results justify it.
+
+# ---------------------------------------------------------------------------
+# Session Windows (UTC)
 # ---------------------------------------------------------------------------
 sessions:
-  london:
-    start: "02:00"
-    end: "05:00"
-    enabled: true
-  new_york_open:
-    start: "09:30"
-    end: "11:00"    # Kill zone: high-probability window
-    enabled: true
-  new_york_afternoon:
-    start: "13:30"
-    end: "16:00"
-    enabled: false   # Lower probability — disabled by default
-  london_close:
-    start: "15:00"
-    end: "16:00"
-    enabled: false
+  # Full session boundaries (informational — used for daily reset logic)
+  london_open:  "02:00"         # 02:00 UTC = 07:00 London (GMT) / 03:00 EDT
+  london_close: "11:00"         # 11:00 UTC = 12:00 London / 07:00 EDT
+
+  new_york_open:  "09:30"       # 09:30 UTC = 09:30 EDT (no offset needed in EDT)
+  new_york_close: "16:00"       # 16:00 UTC = 16:00 EDT
+
+  # Kill Zones — high-probability ICT entry windows
+  # Only signals generated within an active kill zone are considered valid.
+  # Rationale: institutional order flow is most reliable in these windows.
+  kill_zones:
+    london_open_kz:
+      start: "02:00"
+      end: "05:00"
+      enabled: true
+      notes: >
+        London open kill zone. Best for GBP/EUR pairs and index futures with
+        European exposure. Look for AMD (Accumulation/Manipulation/Distribution)
+        setups that complete during this window.
+
+    new_york_open_kz:
+      start: "09:30"
+      end: "11:00"
+      enabled: true
+      notes: >
+        Primary kill zone for ES/NQ. Highest institutional activity of the day.
+        Most ICT setups involving NY gap fills, PDH/PDL sweeps, and opening range
+        FVGs occur in this window. Highest priority.
+
+    new_york_pm_kz:
+      start: "13:30"
+      end: "16:00"
+      enabled: false
+      notes: >
+        NY afternoon / London close overlap. Lower quality than morning session.
+        Can produce clean setups but has higher noise ratio. Disabled by default.
+        Enable selectively after backtesting the PM session independently.
 
 # ---------------------------------------------------------------------------
 # ICT Parameters
@@ -45,72 +125,82 @@ sessions:
 ict:
   # Fair Value Gap
   fvg:
-    min_gap_pct: 0.05          # Minimum gap size as % of price to qualify
-    max_lookback_bars: 50      # How far back to scan for unmitigated FVGs
-    require_imbalance: true    # Gap must be a true price imbalance (no overlap)
+    min_gap_pct: 0.05           # Minimum gap size as % of price to qualify
+                                # 0.05% of ES @ 5000 = 2.5 points minimum
+    max_lookback_bars: 50       # Scan this many bars back for unmitigated FVGs
+    require_imbalance: true     # Both sides of gap must be empty (true imbalance)
+    use_50pct_entry: true       # Target FVG midpoint (50%) as ideal entry price
 
   # Market Structure
   structure:
-    swing_lookback: 5          # Bars left/right to confirm swing high/low
-    displacement_atr_mult: 1.5 # Minimum move (in ATR) to qualify as displacement
-    bos_confirmation: "close"  # close | wick — what constitutes a BOS
+    swing_lookback: 5           # Bars on each side to confirm a swing pivot
+    displacement_atr_mult: 1.5  # Min bar range (in ATR) to qualify as displacement
+    bos_confirmation: "close"   # close = conservative | wick = aggressive
+    require_displacement: true  # BOS/CHoCH only valid if accompanied by displacement
 
-  # Liquidity Levels
+  # Key Levels
   levels:
-    use_pdh_pdl: true          # Previous Day High/Low
-    use_pwh_pwl: true          # Previous Week High/Low
-    use_pmh_pml: false         # Previous Month High/Low
-    proximity_pct: 0.1         # % distance to consider price "at" a level
+    use_pdh_pdl: true           # Previous Day High/Low — primary liquidity targets
+    use_pwh_pwl: true           # Previous Week High/Low — major liquidity targets
+    use_pmh_pml: false          # Previous Month High/Low — macro levels (optional)
+    proximity_pct: 0.05         # Price within this % of level = "at the level"
+                                # 0.05% of 5000 = 2.5 points tolerance for ES
 
   # Bias
   bias:
-    htf_required: true         # Must have HTF alignment before entry
+    htf_required: true          # No trade without confirmed HTF bias direction
     allow_counter_trend: false  # Strict: only trade in bias direction
+    bias_invalidation_choch: true  # A CHoCH on the bias TF resets bias to neutral
 
 # ---------------------------------------------------------------------------
-# Strat Parameters
+# The Strat Parameters
 # ---------------------------------------------------------------------------
 strat:
-  # Candle classification thresholds
   classifier:
-    inside_bar_tolerance: 0.0  # Exact — no tolerance for Type 1
+    inside_bar_tolerance: 0.0   # Exact inside bar — no tolerance for Type 1
 
-  # Pattern recognition
   patterns:
-    lookback: 3                # Bars to look back for pattern completion
+    lookback: 3                 # Max bars to look back for pattern completion
     valid_patterns:
-      - "2u-1-2u"              # Bullish continuation
-      - "2d-1-2d"              # Bearish continuation
-      - "3-1-2u"               # Bullish reversal setup
-      - "3-1-2d"               # Bearish reversal setup
-      - "2u-2u"                # Broadening top (caution)
-      - "2d-2d"                # Broadening bottom (caution)
+      - "2u-1-2u"               # Bullish continuation (primary setup)
+      - "2d-1-2d"               # Bearish continuation (primary setup)
+      - "3-1-2u"                # Bullish reversal after outside bar sweep
+      - "3-1-2d"                # Bearish reversal after outside bar sweep
+      - "2u-2u"                 # Bullish broadening (use with caution)
+      - "2d-2d"                 # Bearish broadening (use with caution)
+
+  trigger:
+    confirm_on_close: true      # Trigger only on bar close (not intrabar wick)
+    max_entry_bars_after_trigger: 3  # Cancel setup if not entered within N bars
 
 # ---------------------------------------------------------------------------
 # Signal Engine
 # ---------------------------------------------------------------------------
 signal:
-  require_ict_fvg: true        # FVG must be present in entry zone
-  require_htf_bias: true       # HTF bias must align
-  require_session_window: true # Must be within an active kill zone
-  require_strat_pattern: true  # Valid Strat pattern must precede entry
-  min_rr_ratio: 2.0            # Minimum risk:reward to generate signal
+  require_ict_fvg: true         # Price must be inside/near an unmitigated FVG
+  require_htf_bias: true        # HTF bias must align with trade direction
+  require_session_window: true  # Trade must occur inside an active kill zone
+  require_strat_pattern: true   # Valid Strat pattern must complete at execution TF
+  require_structure_event: true # BOS or CHoCH must have occurred in bias direction
+  min_rr_ratio: 2.0             # Minimum risk:reward — set in risk_config.yaml too
 
 # ---------------------------------------------------------------------------
 # Execution
 # ---------------------------------------------------------------------------
 execution:
-  slippage_ticks: 1            # Simulated slippage for paper trading
-  commission_per_side: 0.65    # USD per contract (NQ futures approx)
-  order_type: "limit"          # limit | market
-  fill_timeout_bars: 3         # Cancel unfilled limit order after N bars
+  order_type: "limit"           # limit | market
+  fill_timeout_bars: 3          # Cancel unfilled limit order after N bars
+  commission_per_side: 2.25     # USD per contract per side (ES futures, approx)
+  slippage_ticks: 1             # Simulated slippage in paper/backtest (1 tick = $12.50)
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging:
-  level: "DEBUG"               # DEBUG | INFO | WARNING | ERROR
+  level: "INFO"                 # DEBUG | INFO | WARNING | ERROR
   log_dir: "logs/"
   rotate_size: "10 MB"
   retention: "30 days"
-  format: "json"               # json | text
+  format: "json"                # json | text
+  log_signals: true             # Log every generated signal (even if not traded)
+  log_rejections: true          # Log every rejected signal with reason
