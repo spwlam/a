@@ -6,6 +6,22 @@ from datetime import datetime, timedelta, timezone
 from .common import WORK, iter_streamers, log, now_iso
 
 
+def _make_filter(must_contain: list[str] | None):
+    words = [w.lower() for w in (must_contain or [])]
+
+    def _filter(info, *, incomplete=False):
+        # Skip streams that are still live; their replay is picked up on a later run.
+        if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
+            return "still live"
+        # Only this campaign's game (e.g. titles containing "gta").
+        title = (info.get("title") or "").lower()
+        if words and title and not any(w in title for w in words):
+            return "title doesn't match title_must_contain"
+        return None
+
+    return _filter
+
+
 def fetch(cfg: dict, state: dict) -> int:
     import yt_dlp
 
@@ -13,6 +29,9 @@ def fetch(cfg: dict, state: dict) -> int:
     max_items = int(fcfg.get("max_videos_per_source", 3))
     max_age = int(fcfg.get("max_age_days", 3))
     max_height = int(fcfg.get("max_height", 1080))
+    # "audio_first": download only the audio (a 6-hour VOD is ~300 MB instead of ~8 GB),
+    # find the moments, then download just those video sections at render time.
+    audio_first = fcfg.get("mode", "audio_first") == "audio_first"
     date_after = (datetime.now(timezone.utc) - timedelta(days=max_age)).strftime("%Y%m%d")
 
     new = 0
@@ -24,8 +43,10 @@ def fetch(cfg: dict, state: dict) -> int:
             log(f"fetch {handle}: {src}")
             opts = {
                 "outtmpl": str(dest / "%(id)s.%(ext)s"),
-                "format": f"bv*[height<={max_height}]+ba/b[height<={max_height}]/b",
-                "merge_output_format": "mp4",
+                "format": ("ba/b" if audio_first
+                           else f"bv*[height<={max_height}]+ba/b[height<={max_height}]/b"),
+                "merge_output_format": None if audio_first else "mp4",
+                "match_filter": _make_filter(st.get("title_must_contain")),
                 "playlistend": max_items,
                 "daterange": yt_dlp.utils.DateRange(date_after),
                 "download_archive": str(WORK / "downloaded.txt"),
@@ -40,7 +61,7 @@ def fetch(cfg: dict, state: dict) -> int:
                 if not e or not e.get("id"):
                     continue
                 files = list(dest.glob(f"{e['id']}.*"))
-                files = [f for f in files if f.suffix in (".mp4", ".mkv", ".webm")]
+                files = [f for f in files if f.suffix in (".mp4", ".mkv", ".webm", ".m4a", ".opus", ".mp3")]
                 if not files:
                     continue
                 vid = f"{handle}-{e['id']}"
@@ -55,6 +76,7 @@ def fetch(cfg: dict, state: dict) -> int:
                     "view_count": e.get("view_count"),
                     "fetched_at": now_iso(),
                     "analyzed": False,
+                    "audio_only": audio_first,
                 }
                 new += 1
     log(f"fetch done: {new} new video(s)")

@@ -40,6 +40,11 @@ def main() -> None:
     p = sub.add_parser("adjust", help="change a clip's timing and re-render it")
     p.add_argument("id"); p.add_argument("--start", type=float); p.add_argument("--end", type=float)
     p.add_argument("--cold-open", type=float, help="seconds of payoff shown first (0 = off)")
+    p.add_argument("--hook", help='title shown in the first 3s, e.g. "He did NOT see that coming"')
+
+    p = sub.add_parser("calibrate", help="save a gridded screenshot to measure a facecam position")
+    p.add_argument("source", help="a video URL or file")
+    p.add_argument("--at", type=float, default=600, help="seconds into the video (default 600)")
 
     p = sub.add_parser("posted", help="record where you posted a clip")
     p.add_argument("id"); p.add_argument("platform"); p.add_argument("url")
@@ -61,7 +66,7 @@ def main() -> None:
         if a.cmd in ("run", "render"):
             re_.render_all(cfg, state); save_state(state)
         if a.cmd in ("run", "gauntlet"):
-            rv.write_gauntlet(state)
+            rv.write_gauntlet(state, cfg)
         if a.cmd == "add":
             vid = fe.add_local(state, a.path, a.handle, a.campaign, a.url)
             print(f"added {vid}. Now run: python clipper.py find && python clipper.py render")
@@ -77,9 +82,12 @@ def main() -> None:
         elif a.cmd == "reject":
             rv.set_status(state, a.ids, "rejected")
         elif a.cmd == "adjust":
-            rv.adjust(state, a.id, a.start, a.end, a.cold_open)
+            rv.adjust(state, a.id, a.start, a.end, a.cold_open, a.hook)
         elif a.cmd == "export":
             ex.export(cfg, state)
+        elif a.cmd == "calibrate":
+            from pipeline.calibrate import calibrate
+            calibrate(cfg, a.source, a.at)
         elif a.cmd == "posted":
             ex.record_post(state, a.id, a.platform, a.url)
     finally:

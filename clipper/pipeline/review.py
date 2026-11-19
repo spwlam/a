@@ -15,7 +15,7 @@ def _words_text(clip: dict) -> str:
     return " ".join(w["text"] for w in clip.get("words") or []) or "(no transcript)"
 
 
-def write_gauntlet(state: dict) -> int:
+def write_gauntlet(state: dict, cfg: dict | None = None) -> int:
     """Write a review packet for a FRESH agent that has not seen any of your notes."""
     todo = [(cid, c) for cid, c in state["clips"].items() if c["status"] == "rendered"]
     packet = OUT / "review" / "GAUNTLET.md"
@@ -35,8 +35,11 @@ def write_gauntlet(state: dict) -> int:
         "```",
         "",
         "Say **no** if any checklist item fails. Do not edit anything else.",
+        "If a clip has no hook title, or a weak one, include in the faults a suggested",
+        "hook line: under 8 words, accurate to what happens (no fake context or clickbait).",
         "",
     ]
+    camps = {c["name"]: c for c in (cfg or {}).get("campaigns", [])}
     if refs:
         lines += ["## Reference: clips that performed well (compare against these)", ""]
         lines += [f"- `{r.relative_to(ROOT)}`" for r in refs] + [""]
@@ -46,9 +49,14 @@ def write_gauntlet(state: dict) -> int:
             f"- Frames (start → end, left to right): `{os.path.relpath(c['sheet'], ROOT)}`",
             f"- Video file: `{os.path.relpath(c['render'], ROOT)}`",
             f"- Length: {c.get('duration')}s · streamer: @{c['handle']} · campaign: {c['campaign']}",
+            f"- Hook title on screen: {c.get('hook_text') or '(none)'}",
+            f"- Call-to-action on screen (last 3s): {camps.get(c['campaign'], {}).get('cta_text') or '(none)'}",
             f"- Transcript: {_words_text(c)}",
-            "",
         ]
+        extra = camps.get(c["campaign"], {}).get("gauntlet_checks", [])
+        if extra:
+            lines += ["- Extra checks for this campaign:"] + [f"  - [ ] {x}" for x in extra]
+        lines.append("")
     packet.write_text("\n".join(lines))
     log(f"gauntlet packet: {packet} ({len(todo)} clip(s))")
     return len(todo)
@@ -76,7 +84,7 @@ def set_status(state: dict, ids: list[str], status: str, force: bool = False) ->
 
 
 def adjust(state: dict, cid: str, start: float | None, end: float | None,
-           cold_open: float | None) -> None:
+           cold_open: float | None, hook: str | None = None) -> None:
     """Fix a clip's timing and send it back through render + gauntlet."""
     clip = _get(state, cid)
     if start is not None:
@@ -85,6 +93,8 @@ def adjust(state: dict, cid: str, start: float | None, end: float | None,
         clip["end"] = end
     if cold_open is not None:
         clip["cold_open_seconds"] = cold_open
+    if hook is not None:
+        clip["hook_text"] = hook
     clip["status"] = "candidate"
     log(f"{cid}: will re-render ({clip['start']}s → {clip['end']}s)")
 
@@ -111,7 +121,7 @@ def write_review_page(state: dict) -> None:
     <p class="t">{html.escape(_words_text(c))}</p>
     <code>python clipper.py approve {html.escape(cid)}</code>
     <code>python clipper.py reject {html.escape(cid)}</code>
-    <code>python clipper.py adjust {html.escape(cid)} --start {c['start']} --end {c['end']}</code>
+    <code>python clipper.py adjust {html.escape(cid)} --start {c['start']} --end {c['end']} --hook "..."</code>
   </div>
 </article>""")
     page.write_text(f"""<!doctype html><meta charset="utf-8">

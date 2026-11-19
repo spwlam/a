@@ -1,0 +1,104 @@
+# Clipper config. The rule that keeps you safe and paid: ONLY list streamers
+# whose campaign you've joined. The pipeline never touches anyone else.
+
+output:
+  width: 1080
+  height: 1920
+  facecam_height_ratio: 0.38   # "stack" layout: top 38% is the facecam
+  cold_open_seconds: 2.0       # show the payoff first for this long (both campaigns want a 1–2s hook)
+
+fetch:
+  mode: audio_first            # download only audio, then just the video sections that become clips
+  max_videos_per_source: 2     # newest N streams per source each run
+  max_age_days: 3
+  max_height: 1080
+
+find:
+  clips_per_video: 6           # best N moments per stream
+  min_excitement_db: 6
+  pre_roll_seconds: 10
+  post_roll_seconds: 5
+
+captions:
+  whisper_model: base.en
+  font: DejaVu Sans            # install "Montserrat Black" or "Anton" (free, Google Fonts) and put its name here
+  font_size: 84
+  words_per_line: 3
+  tag_format: "@{handle}"
+
+campaigns:
+  # ---------------------------------------------------------------- Tomo
+  - name: tomo-gta6
+    submit_url: https://contentrewards.com   # Clipping Nation → Content Rewards → Tomo GTA VI Clipping
+    platforms: [tiktok, instagram_reels, youtube_shorts]
+    min_seconds: 15
+    max_seconds: 60
+    caption_line: "Subscribe to Tomo on YouTube 👉 youtube.com/@Tomovids"
+    cta_text: "SUBSCRIBE TO TOMO ON YOUTUBE"     # on screen for the last 3 seconds
+    required_tags: []
+    hashtag_pool: ["#tomo", "#tomovids", "#gta6", "#gtavi", "#gta", "#gaming", "#funnymoments"]
+    hashtags_per_post: 5                        # rotated per post, as the campaign asks
+    notes: |
+      $1.50 per 1K views, min $3.50 (2,333 views) / max $150 per clip. 10% platform fee.
+      Funny/chaotic moments and FIRST REACTIONS to new GTA VI features are the priority.
+      Tomo's GTA VI content only. Never portray Tomo negatively. No AI thumbnails or AI content.
+    reminders:
+      - "Submit the link within 30 MINUTES of posting"
+      - "Likes must be visible; keep the post public for 30+ days"
+      - "Keep engagement >= 1%"
+      - "At 2,333 views: send your country analytics in the Clipping Nation Discord support chat"
+      - "Don't post the same clip more than 5 times total"
+    gauntlet_checks:
+      - "Shows Tomo's GTA VI gameplay only (no other games or creators)"
+      - "ONE clear funny, crazy or surprising moment, understandable with no outside context"
+      - "Does not make Tomo look bad"
+      - "Hook title is accurate (no fake context, no clickbait)"
+      - "Captions readable with the sound off"
+      - "Call-to-action naming Tomo is on screen at the end"
+    streamers:
+      - handle: Tomovids
+        credit: "🎥 Tomo (youtube.com/@Tomovids)"
+        title_must_contain: ["gta"]             # skip his non-GTA streams
+        sources:
+          - https://www.youtube.com/@Tomovids/streams
+        # Until you measure his facecam (python clipper.py calibrate <stream url>),
+        # "full" shows the whole stream frame over a blurred background.
+        # After measuring, switch to: layout: stack  and fill in facecam.
+        layout: full
+        # facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.30}
+
+  # ---------------------------------------------------------- KreekCraft
+  - name: kreekcraft-gta6
+    submit_url: https://contentrewards.com   # Content Rewards → KreekCraft GTA 6 Clipping
+    platforms: [tiktok, instagram_reels, youtube_shorts]
+    min_seconds: 15
+    max_seconds: 60
+    caption_line: "Watch KreekCraft on YouTube and Twitch"   # required word for word
+    cta_text: "WATCH KREEKCRAFT LIVE ON YOUTUBE & TWITCH"
+    required_tags: ["#GTA6", "#KreekCraft", "#GrandTheftAutoVI"]
+    hashtag_pool: ["#gaming", "#gta", "#funnymoments", "#gtavi", "#kreek"]
+    hashtags_per_post: 2
+    notes: |
+      $1.00 per 1K views, min $2 (2,000 views) / max $400 per clip.
+      Official KreekCraft GTA 6 livestreams and replays ONLY. His stream overlay MUST be visible.
+      Must drive viewers back to his livestream. Strong hook in the first 1–2 seconds.
+    reminders:
+      - "Caption must contain exactly: Watch KreekCraft on YouTube and Twitch"
+      - "Hashtags #GTA6 #KreekCraft #GrandTheftAutoVI must all be there"
+      - "Likes must be visible; keep the post public for 30+ days"
+      - "Keep engagement >= 0.8%; at least 40% of viewers must be US/UK/CA/AU"
+      - "Don't post the same clip more than 5 times total"
+    gauntlet_checks:
+      - "KreekCraft's stream overlay is visible (his overlay, not just gameplay)"
+      - "From a KreekCraft GTA 6 stream only"
+      - "Not a low-effort screen recording: tight cut, hook title, captions"
+      - "Call-to-action to watch him live is on screen at the end"
+    streamers:
+      - handle: KreekCraft
+        credit: "🎥 KreekCraft"
+        title_must_contain: ["gta"]
+        sources:
+          # One source only. His Twitch replays are the same streams; adding both = duplicate clips.
+          - https://www.youtube.com/@KreekCraft/streams
+          # - https://www.twitch.tv/kreekcraft/videos?filter=archives
+        layout: full    # REQUIRED for this campaign: keeps his overlay in the frame

@@ -29,7 +29,7 @@ def now_iso() -> str:
 def load_config(path: str | None = None) -> dict:
     cfg_path = Path(path) if path else ROOT / "config.yaml"
     if not cfg_path.exists():
-        sys.exit(f"No config at {cfg_path}. Copy config.example.yaml to config.yaml and fill it in.")
+        sys.exit(f"No config at {cfg_path}. ")
     cfg = yaml.safe_load(cfg_path.read_text()) or {}
     cfg.setdefault("output", {})
     cfg.setdefault("fetch", {})

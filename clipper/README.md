@@ -20,21 +20,28 @@ You need Python 3.10+ and ffmpeg.
 # Windows: winget install ffmpeg Python.Python.3.12
 cd clipper
 pip install -r requirements.txt
-cp config.example.yaml config.yaml
 ```
 
 The first run downloads the speech-to-text model (~150 MB) automatically.
 
 Optional: install a punchy bold font (e.g. **Montserrat Black** or **Anton**, both free on Google Fonts) and set `captions.font` in `config.yaml`.
 
-## 2. Join campaigns, then fill in config.yaml
+## 2. Campaigns (already set up in config.yaml)
 
-1. Find GTA 6 / gaming clipping campaigns. Whop's **Content Rewards** is the biggest marketplace; search "GTA" or "clipping". Look for: pay per 1K views, which platforms count, required tags, minimum length and minimum views to get paid.
-2. For each campaign, add a block under `campaigns:`. Paste its rules into `notes`, its tag requirements into `required_tags`, and its streamer(s) under `streamers`.
-3. For each streamer, measure where their **facecam** sits. Screenshot their stream, then estimate x, y, w and h as fractions of the frame (e.g. a cam in the top-left quarter is `{x: 0, y: 0, w: 0.25, h: 0.3}`). Delete `facecam` if they have none.
-4. Start with the **clips** URL (`/clips?filter=clips&range=24hr`). Those are small downloads of moments viewers already liked. Switch to `/videos?filter=archives` (full broadcasts) once things work; those are big downloads but yield more moments.
+`config.yaml` is already filled in for **Tomo GTA VI** and **KreekCraft GTA 6** on Content Rewards: required caption lines, hashtags, call-to-action text and each campaign's extra review checks.
 
-**Only list streamers whose campaign you've joined.** That's what makes this legal and paid.
+Before your first post:
+
+1. **Join both campaigns** in Content Rewards. Join the Clipping Nation Whop and Discord for Tomo, and read its *Approval Guide*. If you're outside the US/UK/CA/AU, also read *How to Target a Tier 1 Audience*.
+2. **Make one dedicated GTA clips account** on TikTok, Instagram and YouTube, connect them in Whop (Settings → Connected Accounts), and do the campaign's **account warm-up** before posting.
+3. **Check the channel links** in `config.yaml` (`sources:`) open the right streamers.
+4. *(Optional, Tomo only)* Measure Tomo's facecam to get the facecam-on-top layout:
+   ```bash
+   python clipper.py calibrate "https://www.youtube.com/watch?v=<a Tomo GTA stream>" --at 1200
+   ```
+   Open `out/calibrate.png`. Each thin line is 0.1 of the frame. Read the facecam box, then set `layout: stack` and `facecam: {x: .., y: .., w: .., h: ..}` for Tomovids. **Keep KreekCraft on `layout: full`**: his campaign requires his overlay to be visible.
+
+Long streams are fetched **audio only** (~300 MB instead of ~8 GB). Only the sections that become clips are downloaded as video.
 
 ## 3. Daily routine (~15 min of your time)
 
@@ -53,6 +60,7 @@ Then **you**: open `out/review.html` in a browser, watch the clips that passed, 
 ```bash
 python clipper.py approve <id> <id> ...
 python clipper.py reject <id>
+python clipper.py adjust <id> --hook "He did NOT see that coming"   # add a hook title (first 3s)
 python clipper.py adjust <id> --start 812.5 --end 840   # fix timing → re-render → re-check
 python clipper.py render && python clipper.py gauntlet   # after adjusting
 python clipper.py export        # approved → out/export/<date>/<campaign>/  (mp4 + caption .txt)
@@ -64,7 +72,7 @@ AirDrop or sync the export folder to your phone, then post each mp4 with the cap
 python clipper.py posted <id> tiktok https://www.tiktok.com/@you/video/...
 ```
 
-Then submit those links in the campaign dashboard. Everything is tracked in `STATUS.md`.
+Then **submit the link in Content Rewards within 30 minutes** (Tomo's rule). Everything is tracked in `STATUS.md`.
 
 ## Running it automatically every morning
 

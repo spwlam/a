@@ -1,6 +1,7 @@
 """Step 5: export approved clips as ready-to-post files and log them in STATUS.md."""
 from __future__ import annotations
 
+import random
 import shutil
 from datetime import date
 
@@ -28,9 +29,16 @@ def export(cfg: dict, state: dict) -> int:
         video = dest / f"{cid}.mp4"
         shutil.copy2(clip["render"], video)
 
-        tags = " ".join(camp.get("required_tags", []) + cfg["output"].get("extra_hashtags", []))
-        credit = st.get("credit", f"🎥 @{clip['handle']}")
-        caption = f"{_hook_line(clip)}\n\n{credit}\n{tags}".strip()
+        # Required tags always; a rotating pick from the pool so posts don't look identical.
+        pool = [t for t in camp.get("hashtag_pool", cfg["output"].get("extra_hashtags", []))
+                if t not in camp.get("required_tags", [])]
+        picked = random.sample(pool, min(len(pool), int(camp.get("hashtags_per_post", 4))))
+        tags = " ".join(camp.get("required_tags", []) + picked)
+        title = clip.get("hook_text") or _hook_line(clip)
+        lines = [title, "", camp.get("caption_line", "") or st.get("credit", f"🎥 @{clip['handle']}"),
+                 tags]
+        caption = "\n".join(lines).strip()
+        reminders = "".join(f"  - {r}\n" for r in camp.get("reminders", []))
         (dest / f"{cid}.txt").write_text(
             f"CAPTION (paste this):\n{caption}\n\n"
             f"Post on: {', '.join(camp.get('platforms', ['tiktok', 'youtube_shorts', 'instagram_reels']))}\n"
@@ -38,6 +46,7 @@ def export(cfg: dict, state: dict) -> int:
             f"Submit links at: {camp.get('submit_url') or '(add submit_url to config.yaml)'}\n"
             f"Campaign rules: {camp.get('notes', '').strip() or '(see campaign page)'}\n"
             f"Source: {clip.get('source_url', '')}\n\n"
+            + (f"REMINDERS:\n{reminders}\n" if reminders else "") +
             f"After posting, record each link:\n"
             f"  python clipper.py posted {cid} tiktok <url>\n"
         )
