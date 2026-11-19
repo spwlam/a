@@ -1,0 +1,54 @@
+# Copy this file to config.yaml and fill it in.
+#
+# The rule that keeps you safe: ONLY list streamers whose campaign you've
+# joined (or who gave you permission). The pipeline never touches anyone else.
+
+output:
+  width: 1080
+  height: 1920
+  facecam_height_ratio: 0.38   # top 38% of the vertical frame is the facecam
+  cold_open_seconds: 2.0       # show the payoff first for this long, then the build-up (0 = off)
+  extra_hashtags: ["#gta6", "#gta6clips", "#gtavi"]
+
+fetch:
+  max_videos_per_source: 3     # newest N items per source URL each run
+  max_age_days: 3              # ignore anything older
+  max_height: 1080
+
+find:
+  clips_per_video: 6           # best N moments kept per long VOD
+  min_excitement_db: 6         # how much louder than the surrounding minute a moment must be
+  pre_roll_seconds: 10         # build-up kept before the peak
+  post_roll_seconds: 5         # reaction kept after the peak
+  # keywords: ["no way", "let's go", ...]   # optional: override the reaction words
+
+captions:
+  whisper_model: base.en       # tiny.en is faster, small.en is more accurate
+  font: DejaVu Sans            # install a bold font like "Montserrat Black" or "Anton" and name it here
+  font_size: 84
+  words_per_line: 3
+  tag_format: "@{handle}"
+
+campaigns:
+  - name: example-campaign                # any short name
+    submit_url: ""                        # where you submit your posted links
+    platforms: [tiktok, youtube_shorts, instagram_reels]
+    required_tags: ["@examplestreamer"]   # whatever the campaign rules require
+    min_seconds: 15
+    max_seconds: 60
+    notes: |
+      Paste the campaign's rules here so you see them when you export.
+    streamers:
+      - handle: examplestreamer
+        credit: "🎥 @examplestreamer on Twitch"
+        sources:
+          # Twitch top clips of the last day: small downloads, already-good moments.
+          - https://www.twitch.tv/examplestreamer/clips?filter=clips&range=24hr
+          # Or full past broadcasts (big downloads, more moments found):
+          # - https://www.twitch.tv/examplestreamer/videos?filter=archives
+        # Where the facecam sits in THEIR stream layout, as fractions of the frame.
+        # x/y = top-left corner, w/h = size. Take a screenshot of a stream to measure.
+        # Delete this block if they have no facecam.
+        facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.30}
+        # Optional: which part of the frame is gameplay (default: whole frame).
+        # gameplay: {x: 0.1, y: 0.0, w: 0.8, h: 1.0}
